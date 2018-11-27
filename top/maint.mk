@@ -303,18 +303,22 @@ define _sc_search_regexp
 									\
    : Filter by content;							\
    test -n "$$files" && test -n "$$containing"				\
-     && { files=$$(grep -l "$$containing" $$files); } || :;		\
+     && { files=$$(echo "$$files"					\
+       | xargs grep -l "$$containing" /dev/null); } || :;		\
    test -n "$$files" && test -n "$$non_containing"			\
-     && { files=$$(grep -vl "$$non_containing" $$files); } || :;	\
+     && { files=$$(echo "$$files"					\
+       | xargs grep -vl "$$non_containing" /dev/null); } || :;		\
 									\
    : Check for the construct;						\
    if test -n "$$files"; then						\
      if test -n "$$prohibit"; then					\
-       grep $$with_grep_options $(_ignore_case) -nE "$$prohibit" $$files \
+       echo "$$files" /dev/null | xargs					\
+         grep $$with_grep_options $(_ignore_case) -nE "$$prohibit"	\
          | grep -vE "$${exclude:-^$$}"					\
          && { msg="$$halt" $(_sc_say_and_exit) } || :;			\
      else								\
-       grep $$with_grep_options $(_ignore_case) -LE "$$require" $$files \
+       echo "$$files" | xargs						\
+         grep $$with_grep_options $(_ignore_case) -LE "$$require"	\
            | grep .							\
          && { msg="$$halt" $(_sc_say_and_exit) } || :;			\
      fi									\
@@ -323,9 +327,10 @@ define _sc_search_regexp
 endef
 
 sc_avoid_if_before_free:
-	@$(srcdir)/$(_build-aux)/useless-if-before-free			\
-		$(useless_free_options)					\
-	    $$($(VC_LIST_EXCEPT) | grep -v useless-if-before-free) &&	\
+	@$(VC_LIST_EXCEPT) | grep -v useless-if-before-free		\
+            | xargs							\
+	      $(srcdir)/$(_build-aux)/useless-if-before-free		\
+	      $(useless_free_options)		 &&	                \
 	  { echo '$(ME): found useless "if" before "free" above' 1>&2;	\
 	    exit 1; } || :
 
@@ -399,14 +404,16 @@ sc_error_exit_success:
 # "FATAL:" should be fully upper-cased in error messages
 # "WARNING:" should be fully upper-cased, or fully lower-cased
 sc_error_message_warn_fatal:
-	@grep -nEA2 '[^rp]error *\(' $$($(VC_LIST_EXCEPT))		\
+	@$(VC_LIST_EXCEPT) | xargs		 			\
+	    grep -nEA2 '[^rp]error *\(' /dev/null			\
 	    | grep -E '"Warning|"Fatal|"fatal' &&			\
 	  { echo '$(ME): use FATAL, WARNING or warning'	1>&2;		\
 	    exit 1; } || :
 
 # Error messages should not start with a capital letter
 sc_error_message_uppercase:
-	@grep -nEA2 '[^rp]error *\(' $$($(VC_LIST_EXCEPT))		\
+	@$(VC_LIST_EXCEPT) | xargs 					\
+	    grep -nEA2 '[^rp]error *\(' /dev/null			\
 	    | grep -E '"[A-Z]'						\
 	    | grep -vE '"FATAL|"WARNING|"Java|"C#|PRIuMAX' &&		\
 	  { echo '$(ME): found capitalized error message' 1>&2;		\
@@ -414,7 +421,8 @@ sc_error_message_uppercase:
 
 # Error messages should not end with a period
 sc_error_message_period:
-	@grep -nEA2 '[^rp]error *\(' $$($(VC_LIST_EXCEPT))		\
+	@$(VC_LIST_EXCEPT) | xargs					\
+            grep -nEA2 '[^rp]error *\(' /dev/null 			\
 	    | grep -E '[^."]\."' &&					\
 	  { echo '$(ME): found error message ending in period' 1>&2;	\
 	    exit 1; } || :
@@ -845,7 +853,10 @@ sc_prohibit_always-defined_macros:
 	  case $$(echo all: | grep -l -f - Makefile) in Makefile);; *)	\
 	    echo '$(ME): skipping $@: you lack GNU grep' 1>&2; exit 0;;	\
 	  esac;								\
-	  $(def_sym_regex) | grep -E -f - $$($(VC_LIST_EXCEPT))		\
+	  sym_regexes=$$(mktemp);					\
+	  $(def_sym_regex) > $$sym_regexes;				\
+	  $(VC_LIST_EXCEPT) | xargs					\
+	    grep -E -f $$sym_regexes /dev/null				\
 	    && { echo '$(ME): define the above via some gnulib .h file'	\
 		  1>&2;  exit 1; } || :;				\
 	fi
@@ -927,7 +938,8 @@ require_exactly_one_NL_at_EOF_ =					\
     }									\
   END { exit defined $$fail }
 sc_prohibit_empty_lines_at_EOF:
-	@perl -le '$(require_exactly_one_NL_at_EOF_)' $$($(VC_LIST_EXCEPT)) \
+	@$(VC_LIST_EXCEPT) | xargs -I{}					\
+	  perl -le '$(require_exactly_one_NL_at_EOF_)' {}		\
 	  || { echo '$(ME): empty line(s) or no newline at EOF'		\
 		1>&2; exit 1; } || :
 
@@ -972,7 +984,8 @@ prohibit_doubled_word_ =						\
 ignore_doubled_word_match_RE_ ?= ^$$
 
 sc_prohibit_doubled_word:
-	@perl -n -0777 $(prohibit_doubled_word_) $$($(VC_LIST_EXCEPT))	\
+	@$(VC_LIST_EXCEPT) | xargs		 			\
+	  perl -n -0777 $(prohibit_doubled_word_)			\
 	  | grep -vE '$(ignore_doubled_word_match_RE_)'			\
 	  | grep . && { echo '$(ME): doubled words' 1>&2; exit 1; } || :
 
@@ -998,8 +1011,8 @@ prohibit_undesirable_word_seq_ =					\
 ignore_undesirable_word_sequence_RE_ ?= ^$$
 
 sc_prohibit_undesirable_word_seq:
-	@perl -n -0777 $(prohibit_undesirable_word_seq_)		\
-	     $$($(VC_LIST_EXCEPT))					\
+	@$(VC_LIST_EXCEPT) | xargs					\
+	  perl -n -0777 $(prohibit_undesirable_word_seq_)		\
 	  | grep -vE '$(ignore_undesirable_word_sequence_RE_)' | grep .	\
 	  && { echo '$(ME): undesirable word sequence' >&2; exit 1; } || :
 
@@ -1033,7 +1046,8 @@ sc_prohibit_test_double_equal:
 # definition of LDADD from the appropriate Makefile.am and exits 0
 # when it contains "ICONV".
 sc_proper_name_utf8_requires_ICONV:
-	@progs=$$(grep -l 'proper_name_utf8 ''("' $$($(VC_LIST_EXCEPT)));\
+	@progs=$$($(VC_LIST_EXCEPT) | xargs				\
+          grep -l 'proper_name_utf8 ''("' /dev/null); 			\
 	if test "x$$progs" != x; then					\
 	  fail=0;							\
 	  for p in $$progs; do						\
@@ -1155,8 +1169,8 @@ sc_po_check:
 	@if test -f $(po_file); then					\
 	  grep -E -v '^(#|$$)' $(po_file)				\
 	    | grep -v '^src/false\.c$$' | sort > $@-1;			\
-	  files=$$(perl $(perl_translatable_files_list_)		\
-	    $$($(VC_LIST_EXCEPT)) $(generated_files));			\
+	  files=$$($(VC_LIST_EXCEPT) | xargs -I{}			\
+	    perl $(perl_translatable_files_list_) {} $(generated_files)); \
 	  grep -E -l '$(_gl_translatable_string_re)' $$files		\
 	    | $(SED) 's|^$(_dot_escaped_srcdir)/||' | sort -u > $@-2;	\
 	  diff -u -L $(po_file) -L $(po_file) $@-1 $@-2			\
@@ -1230,7 +1244,8 @@ sc_cross_check_PATH_usage_in_tests:
 		 exit 1; };						\
 	  good=$$(grep -E '$(_hv_regex_strong)' $(_hv_file));		\
 	  grep -LFx "$$good"						\
-		$$(grep -lE '$(_hv_regex_weak)' $$($(VC_LIST_EXCEPT)))	\
+		$$($(VC_LIST_EXCEPT) | xargs				\
+		  grep -lE '$(_hv_regex_weak)' /dev/null)		\
 	      | grep . &&						\
 	    { echo "$(ME): the above files use path_prepend_ inconsistently" \
 		1>&2; exit 1; } || :;					\
