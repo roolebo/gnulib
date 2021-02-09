@@ -7,6 +7,8 @@ dnl with or without modifications, as long as this notice is preserved.
 
 AC_DEFUN([gl_EXTERN_INLINE],
 [
+  AC_CHECK_HEADERS_ONCE([sys/cdefs.h])
+
   AH_VERBATIM([extern_inline],
 [/* Please see the Gnulib manual for how to use these macros.
 
@@ -51,6 +53,12 @@ AC_DEFUN([gl_EXTERN_INLINE],
      warning: to disable this warning use -fgnu89-inline or the gnu_inline function attribute
    It defines a macro __GNUC_GNU_INLINE__ to indicate this situation.
  */
+
+/* Pull __header_inline definition */
+#ifdef HAVE_SYS_CDEFS_H
+# include <sys/cdefs.h>
+#endif
+
 #if (((defined __APPLE__ && defined __MACH__) \
       || defined __DragonFly__ || defined __FreeBSD__) \
      && (defined __header_inline \
